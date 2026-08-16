@@ -49,6 +49,7 @@ class LiveMarket:
         self.candles: deque[dict] = deque(maxlen=240)
         self.market: dict = {}
         self.btc_price = 0.0
+        self.coinbase_prices = {"BTC-USD": 0.0, "ETH-USD": 0.0, "SOL-USD": 0.0}
         self.yes_bid = 0.0
         self.yes_ask = 0.0
         self.volume = 0.0
@@ -83,7 +84,7 @@ class LiveMarket:
             try:
                 self.source["coinbase"] = "connecting"
                 async with websockets.connect(COINBASE_WS, ping_interval=20, ping_timeout=20) as ws:
-                    await ws.send(json.dumps({"type": "subscribe", "product_ids": ["BTC-USD"], "channel": "ticker"}))
+                    await ws.send(json.dumps({"type": "subscribe", "product_ids": list(self.coinbase_prices), "channel": "ticker"}))
                     await ws.send(json.dumps({"type": "subscribe", "channel": "heartbeats"}))
                     self.source["coinbase"] = "live"
                     delay = 1
@@ -93,13 +94,15 @@ class LiveMarket:
                             continue
                         for event in data.get("events", []):
                             for ticker in event.get("tickers", []):
-                                if ticker.get("product_id") != "BTC-USD":
+                                product = ticker.get("product_id")
+                                if product not in self.coinbase_prices:
                                     continue
                                 now = time.time()
+                                self.coinbase_prices[product] = float(ticker["price"])
                                 self.updated["coinbase"] = now
-                                if now - self.last_coinbase_publish >= 0.04:
+                                if product == "BTC-USD" and now - self.last_coinbase_publish >= 0.04:
                                     self.last_coinbase_publish = now
-                                    await self.publish({"type": "coinbase", "price": float(ticker["price"]), "timestamp_ms": int(now * 1000)})
+                                    await self.publish({"type": "coinbase", "price": self.coinbase_prices[product], "timestamp_ms": int(now * 1000)})
             except asyncio.CancelledError:
                 raise
             except Exception as error:
@@ -261,6 +264,7 @@ class LiveMarket:
             event = LiveEvent(
                 elapsed, datetime.now(timezone.utc).isoformat(), self.yes_bid, self.yes_ask,
                 self.btc_price, float(self.market.get("target_price") or 0), self.volume,
+                self.coinbase_prices["ETH-USD"], self.coinbase_prices["SOL-USD"],
             )
             analytics = await self.engine.analyze(event)
             value = point(event, analytics)
