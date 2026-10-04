@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kalshi-terminal-trader"
+version = "0.1.0"
+description = "Safe-by-default terminal limit-order trading for Kalshi"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.31",
+  "cryptography>=42.0",
+  "websocket-client>=1.7",
+]
+
+[project.scripts]
+ktrade = "kalshi_terminal.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kalshi_terminal*"]
